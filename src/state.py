@@ -1,13 +1,14 @@
-import numpy as np
-from numpy.typing import NDArray
+from typing import List
 
-ALL_DOMINOES: NDArray[tuple[np.int_, np.int_]] = np.array([(i, j) for i in range(7) for j in range(i, 7)])
-DOMINOES_WEIGHTS: NDArray[np.int_] = np.array([a + b for (a, b) in ALL_DOMINOES])
+ALL_DOMINOES: List[tuple[int, int]] = [(i, j) for i in range(7) for j in range(i, 7)]
+DOMINOES_WEIGHTS: List[int] = [a + b for (a, b) in ALL_DOMINOES]
+TOTAL_STATE_LEN = 62
 
 
 class DominoState:
-    def __init__(self, used_tiles: NDArray[np.bool_], hand_tiles: NDArray[np.bool_],
-                 left_end: np.int_, right_end: np.int_, remaining_counts: NDArray[np.bool_]):
+    """Represents a state of the environment on behalf of acting player"""
+    def __init__(self, used_tiles: List[bool], hand_tiles: List[bool],
+                 left_end: int, right_end: int, remaining_counts: List[int]):
         """
         Initialize a DominoState.
         :param used_tiles: length-28 list (0/1) indicating if each domino index has been played. [0-27]
@@ -35,13 +36,13 @@ class DominoState:
         self.remaining_counts = remaining_counts
 
     @property
-    def legal_actions(self) -> NDArray[np.bool_]:
+    def legal_actions(self) -> List[bool]:
         """
         :return: List of legal actions.
         """
         if self.is_board_empty:
-            return np.array([True] * 56 + [False])  # Any move except no-move
-        mask = np.array([False] * 57, dtype=np.bool_)
+            return [True] * 56 + [False]  # Any move except no-move
+        mask = [False] * 57
         any_move = False
         for tile_index in range(len(ALL_DOMINOES)):
             if self.hand_tiles[tile_index]:
@@ -56,6 +57,10 @@ class DominoState:
         if not any_move:
             mask[56] = True
         return mask
+
+    def to_array(self) -> list[int | bool]:
+        """Convert the state to a flat list of features (for neural network input)."""
+        return self.used_tiles + self.hand_tiles + [self.left_end, self.right_end] + self.remaining_counts
 
     @property
     def is_board_empty(self):
