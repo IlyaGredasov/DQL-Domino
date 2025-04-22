@@ -8,7 +8,7 @@ from src.state import DominoState, ALL_DOMINOES
 class DominoEnvironment:
     """Environment for the Dominoes game (2-4 players) following standard Block Domino rules."""
 
-    def __init__(self, num_players: int = 2, agent_indices: List[int] = (0,)):
+    def __init__(self, num_players: int = 2, agent_indices: List[int] = []):
         if agent_indices is None:
             agent_indices = {0}
         if not 2 <= num_players <= 4:
