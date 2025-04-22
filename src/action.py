@@ -19,9 +19,12 @@ class DominoAction:
             self.tile_index: int = action_index // 2
             self.play_on_left: bool = (action_index % 2 == 0)
 
-    def __repr__(self):
+    def __str__(self):
         if self.is_pass:
             return "Pass"
         tile = ALL_DOMINOES[self.tile_index]
         side = "Left" if self.play_on_left else "Right"
         return f"Play {tile} on {side}"
+
+    def __repr__(self):
+        return str(self)
