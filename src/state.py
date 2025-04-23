@@ -6,18 +6,10 @@ TOTAL_STATE_LEN = 62
 
 
 class DominoState:
-    """Represents a state of the environment on behalf of acting player"""
+    """Represents a state of the environment on behalf of acting player."""
 
     def __init__(self, used_tiles: List[bool], hand_tiles: List[bool],
                  left_end: int, right_end: int, remaining_counts: List[int]):
-        """
-        Initialize a DominoState.
-        :param used_tiles: length-28 list (0/1) indicating if each domino index has been played. [0-27]
-        :param hand_tiles: length-28 list (0/1) indicating if current player holds each domino. [28-55]
-        :param left_end: value at the left end of the chain (or -1 if no tiles played yet). [56]
-        :param right_end: value at the right end of the chain (or -1 if no tiles played yet). [57]
-        :param remaining_counts: length-4 list of domino counts for each player (unused players as -1). [58-61]
-        """
         if any(i != 0 and i != 1 for i in used_tiles):
             raise ValueError("Used tiles must be 0 or 1")
         if any(i != 0 and i != 1 for i in hand_tiles):
@@ -38,12 +30,13 @@ class DominoState:
 
     @property
     def legal_actions(self) -> List[bool]:
-        """
-        :return: List of legal actions.
-        """
-        if self.is_board_empty:
-            return [True] * 56 + [False]  # Any move except no-move
         mask = [False] * 57
+        if self.is_board_empty:
+            for tile_idx, held in enumerate(self.hand_tiles):
+                if held:
+                    mask[tile_idx * 2] = True   # Place on left end
+                    mask[tile_idx * 2 + 1] = True  # Place on right end
+            return mask
         any_move = False
         for tile_index in range(len(ALL_DOMINOES)):
             if self.hand_tiles[tile_index]:
@@ -60,7 +53,6 @@ class DominoState:
         return mask
 
     def to_array(self) -> list[int | bool]:
-        """Convert the state to a flat list of features (for neural network input)."""
         return self.used_tiles + self.hand_tiles + [self.left_end, self.right_end] + self.remaining_counts
 
     @property
@@ -74,7 +66,6 @@ class DominoState:
         used_dominoes = ', '.join(str(ALL_DOMINOES[i]) for i in used)
         hand_dominoes = ', '.join(str(ALL_DOMINOES[i]) for i in hand)
         rem = ', '.join(f"P{i}: {c}" if c != -1 else f"P{i}: -" for i, c in enumerate(self.remaining_counts))
-
         return (
             f"[DominoState]\n"
             f"{board_info}\n"

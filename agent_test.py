@@ -1,25 +1,17 @@
-from random import seed, choice, randint
+from random import choice, randint
 
 from src.action import TOTAL_ACTIONS
+from src.agent import DominoAgent
 from src.environment import DominoEnvironment, DominoAction
 from src.state import ALL_DOMINOES
 
 
-def print_action_help(legal_actions: list[int]):
-    print("\nAvailable actions:")
-    for a in sorted(legal_actions):
-        if a == 56:
-            print(f"  {a}: pass")
-        else:
-            tile = ALL_DOMINOES[a // 2]
-            side = "left" if a % 2 == 0 else "right"
-            print(f"  {a}: play {tile} on {side}")
-
-
 def main():
-    seed(37)
+    """ Checking of environment logic correctness"""
     n = randint(2, 4)
-    env = DominoEnvironment(num_players=n, agent_indices=[i for i in range(n)])
+    env = DominoEnvironment(num_players=n, agent_indices=[randint(0, n - 1)])
+    agent = DominoAgent()
+    agent.load("domino_agent.pt")
     _ = env.reset()
 
     while True:
@@ -29,8 +21,8 @@ def main():
             mask = state.legal_actions
 
             hand_tiles = [i for i, held in enumerate(state.hand_tiles) if held]
-            available_player_actions = [x for i in hand_tiles for x in (2 * i, 2 * i + 1)] + [TOTAL_ACTIONS - 1]
-            available_board_actions = [i for i, avail in enumerate(mask) if avail]
+            available_player_actions = [x for i in hand_tiles for x in (2 * i, 2 * i + 1)] + [TOTAL_ACTIONS - 1] # actions that can be played accordingly to hand
+            available_board_actions = [i for i, avail in enumerate(mask) if avail] # actions that can be played accordingly to board
 
             legal_actions = sorted(set(available_player_actions) & set(available_board_actions))
             if legal_actions == [TOTAL_ACTIONS - 1] and env.draw_pile:
@@ -40,8 +32,9 @@ def main():
                 break
         print(env)
         print(env.current_state)
-        print_action_help(legal_actions)
-        if env.current_player not in env.agent_indices:
+        agent.select_action(env.current_state, legal_actions, training=False, suggestions=True)
+
+        if env.current_player in env.agent_indices:
             while True:
                 try:
                     action_index = int(input("Your action: "))

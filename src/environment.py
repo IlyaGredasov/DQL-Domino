@@ -4,11 +4,13 @@ from typing import Set, List, Optional
 from src.action import DominoAction
 from src.state import DominoState, ALL_DOMINOES
 
+REWARD_SCALE = 12.0
+
 
 class DominoEnvironment:
-    """Environment for the Dominoes game (2-4 players) following standard Block Domino rules."""
+    """Environment for the Dominoes game (2-4 players) following standard Domino rules."""
 
-    def __init__(self, num_players: int = 2, agent_indices: List[int] = []):
+    def __init__(self, num_players: int = 2, agent_indices: List[int] = None):
         if agent_indices is None:
             agent_indices = {0}
         if not 2 <= num_players <= 4:
@@ -36,7 +38,6 @@ class DominoEnvironment:
                            remaining_counts)
 
     def reset(self) -> DominoState:
-        """Start a new domino game. Deal tiles and return initial state for player 0."""
         tiles = list(range(len(ALL_DOMINOES)))  # [0-27]
         random.shuffle(tiles)
         self.player_hands = []
@@ -55,7 +56,6 @@ class DominoEnvironment:
         return self.current_state
 
     def apply_action(self, action: DominoAction):
-        """Apply the given action for the specified player (updates game state)."""
         if action.is_pass:
             if self.current_state.is_board_empty:
                 raise ValueError("Can't apply pass action on empty board")
@@ -90,21 +90,11 @@ class DominoEnvironment:
         self.player_hands[self.current_player].remove(tile_idx)
         self.used_tiles.add(tile_idx)
         self.consecutive_passes = 0
-        # If a player empties their hand by playing a tile, they win
         if len(self.player_hands[self.current_player]) == 0:
             # Mark a special flag to indicate game end due to win
             self.consecutive_passes = self.num_players  # force game end condition
 
     def draw_tile(self, tile_index: Optional[int] = None) -> tuple[bool, int]:
-        """
-        Draw a tile for the current player.
-
-        - If tile_index is None → draw from the top (normal draw)
-        - If tile_index is int → draw the N-th tile in the pile (debug mode)
-
-        Returns True if a tile was successfully drawn and added to the player's hand,
-        False if the draw pile is empty or the tile_index is invalid.
-        """
         if not self.draw_pile:
             return False, -1
 
@@ -120,11 +110,6 @@ class DominoEnvironment:
 
     def check_terminal_state(self) -> Optional[dict[int, float]]:
         for p in range(self.num_players):
-            """
-            Check if the game has ended, and return per-player rewards if so.
-            - If a player has no tiles → win
-            - If everyone passed and the pile is empty → draw
-            """
             if len(self.player_hands[p]) == 0:
                 self.final_rewards = self.finalize_game(winner=p)
                 return self.final_rewards
@@ -136,33 +121,27 @@ class DominoEnvironment:
         return None
 
     def step(self, action: DominoAction) -> tuple[DominoState, float, bool]:
-        """
-        Apply one action from the current player and return:
-        - the resulting state
-        - the reward for the acting player
-        - whether the game is done
-        """
         if not self.current_state.legal_actions[action.index]:
             raise ValueError(f"Illegal action {action.index} for current state.")
 
+        if action.is_pass:
+            step_reward = -25.0 / REWARD_SCALE  # reward scaling to not distract agent too much
+        else:
+            tile_idx = action.tile_index
+            a, b = ALL_DOMINOES[tile_idx]
+            step_reward = (a + b) / REWARD_SCALE  # reward scaling to not distract agent too much
+
         self.apply_action(action)
 
-        rewards = self.check_terminal_state()
-        if rewards is not None:
-            return self.current_state, rewards.get(self.current_player, 0.0), True
+        end_rewards = self.check_terminal_state()
+        if end_rewards is not None:
+            total_reward = step_reward + end_rewards.get(self.current_player, 0.0)
+            return self.current_state, total_reward, True
 
-        # Advance turn
         self.current_player = (self.current_player + 1) % self.num_players
-        return self.current_state, 0.0, False
+        return self.current_state, step_reward, False
 
     def finalize_game(self, winner: Optional[int]) -> dict[int, float]:
-        """
-        Finalize game and compute per-player rewards.
-        - Win: winner gets sum of opponents' pips, others get -own_pips
-        - Draw: everyone gets avg_pips - own_pips
-        - Special rule: if a player ends with only (0,0), they get -25
-        """
-
         def pip_sum(tiles: set[int]) -> int:
             return sum(ALL_DOMINOES[i][0] + ALL_DOMINOES[i][1] for i in tiles)
 
@@ -172,20 +151,18 @@ class DominoEnvironment:
             pip_counts = [pip_sum(self.player_hands[p]) for p in range(self.num_players)]
             avg_pips = sum(pip_counts) / self.num_players
             for p in range(self.num_players):
-                rewards[p] = avg_pips - pip_counts[p]
+                rewards[p] = avg_pips - pip_counts[p]  # (p_1+...+p_n)/n-p_i
         else:
             for p in range(self.num_players):
                 if p == winner:
                     rewards[p] = float(
                         sum(pip_sum(self.player_hands[opp]) for opp in range(self.num_players) if opp != p)
-                    )
+                    )  # p_1+...p_n (all pips except self == 0)
                 else:
-                    rewards[p] = -float(pip_sum(self.player_hands[p]))
-
+                    rewards[p] = -float(pip_sum(self.player_hands[p]))  # -p_i
         for p, hand in enumerate(self.player_hands):
-            if hand == {0}:  # {(0, 0)}
-                rewards[p] = -25.0
-
+            if hand == {0}:  # special for {(0, 0)}
+                rewards[p] = -10.0
         return rewards
 
     def __str__(self) -> str:
